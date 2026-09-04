@@ -1,0 +1,49 @@
+{
+  "name": "otus-sepolia-agent",
+  "version": "0.1.0",
+  "description": "Read-only LangChain agent for Ethereum Sepolia",
+  "scripts": {
+    "test": "vitest run --config vitest.config.ts",
+    "dev": "tsx src/cli.ts",
+    "start": "node dist/cli.js",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test:watch": "vitest --config vitest.config.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mangert/otus_sepolia-agent.git"
+  },
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/mangert/otus_sepolia-agent/issues"
+  },
+  "homepage": "https://github.com/mangert/otus_sepolia-agent#readme",
+  "private": true,
+  "engines": {
+    "node": ">=24.0.0 <25",
+    "npm": ">=11"
+  },
+  "dependencies": {
+    "@langchain/core": "^1.2.9",
+    "dotenv": "^17.4.2",
+    "langchain": "^1.5.10",
+    "typescript": "^6.0.3",
+    "viem": "^2.56.3",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.4.1",
+    "eslint": "^10.10.0",
+    "prettier": "^3.9.6",
+    "tsx": "^4.23.13",
+    "typescript-eslint": "^8.69.0",
+    "vitest": "^5.0.0"
+  }
+}

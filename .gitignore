@@ -1,6 +1,13 @@
 # Dependencies
 node_modules/
 
+# TypeScript build artifacts
+dist/
+*.tsbuildinfo
+
+# Test artifacts
+coverage/
+
 # Local environment files
 .env
 .env.*

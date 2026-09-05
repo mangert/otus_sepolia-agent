@@ -1,0 +1,8 @@
+{
+  "provider": "opencode-llm-proxy",
+  "protocol": "openai-compatible",
+  "baseUrl": "http://127.0.0.1:4010/v1",
+  "model": "opencode/nemotron-3-ultra-free",
+  "timeoutMs": 60000,
+  "maxRetries": 2
+}

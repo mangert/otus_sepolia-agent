@@ -1,7 +1,8 @@
-import { getAddress, isAddress, type Address, type Hash } from 'viem';
+import { getAddress, isAddress, type Address, type Hash, type Hex } from 'viem';
 import { z } from 'zod';
 
 const transactionHashPattern = /^0x[0-9a-fA-F]{64}$/;
+const hexDataPattern = /^0x(?:[0-9a-fA-F]{2})*$/;
 const decimalBlockNumberPattern = /^(0|[1-9][0-9]*)$/;
 
 const collectionLimitSchema = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
@@ -11,10 +12,17 @@ export const ethereumAddressSchema = z
   .refine((value) => isAddress(value), 'Invalid Ethereum address.')
   .transform((value): Address => getAddress(value));
 
-export const transactionHashSchema = z
+export const ethereumHashSchema = z
   .string()
-  .regex(transactionHashPattern, 'Transaction hash must be a 32-byte hex value.')
+  .regex(transactionHashPattern, 'Ethereum hash must be a 32-byte hex value.')
   .transform((value): Hash => value as Hash);
+
+export const transactionHashSchema = ethereumHashSchema;
+
+export const hexDataSchema = z
+  .string()
+  .regex(hexDataPattern, 'Hex data must contain complete bytes with a 0x prefix.')
+  .transform((value): Hex => value as Hex);
 
 export const blockNumberSchema = z
   .union([
@@ -84,6 +92,12 @@ export const validateEthereumAddress = (value: unknown): Address =>
 
 /** Проверяет хэш Ethereum-транзакции без изменения значения. */
 export const validateTransactionHash = (value: unknown): Hash => transactionHashSchema.parse(value);
+
+/** Проверяет 32-байтовый Ethereum-хэш без изменения значения. */
+export const validateEthereumHash = (value: unknown): Hash => ethereumHashSchema.parse(value);
+
+/** Проверяет hex-данные без изменения значения. */
+export const validateHexData = (value: unknown): Hex => hexDataSchema.parse(value);
 
 /** Проверяет номер блока и преобразует его в bigint. */
 export const validateBlockNumber = (value: unknown): bigint => blockNumberSchema.parse(value);

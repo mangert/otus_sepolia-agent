@@ -17,6 +17,36 @@ export {
   type ChainInfoResult,
 } from './get-chain-info.js';
 export {
+  DEFAULT_BYTECODE_PREVIEW_BYTES,
+  GetContractCodeError,
+  MAX_BYTECODE_PREVIEW_BYTES,
+  getContractCode,
+  type ContractCodeClient,
+  type ContractCodeResult,
+  type GetContractCodeInput,
+  type GetContractCodeOptions,
+} from './get-contract-code.js';
+export {
+  DEFAULT_LOG_BLOCK_RANGE,
+  DEFAULT_LOG_DATA_PREVIEW_BYTES,
+  DEFAULT_LOG_RESULT_LIMIT,
+  GetLogsError,
+  MAX_LOG_BLOCK_RANGE,
+  MAX_LOG_DATA_PREVIEW_BYTES,
+  MAX_LOG_RESULT_LIMIT,
+  MAX_RPC_LOG_RESULTS,
+  MAX_TOPIC_OR_VALUES,
+  getLogs,
+  type GetLogsInput,
+  type GetLogsOptions,
+  type GetLogsResult,
+  type LogResult,
+  type LogsClient,
+  type LogsRpcFilter,
+  type LogsRpcRequest,
+  type TopicFilter,
+} from './get-logs.js';
+export {
   GetNativeBalanceError,
   getNativeBalance,
   type NativeBalanceClient,
@@ -24,8 +54,8 @@ export {
   type NativeBalanceResult,
 } from './get-native-balance.js';
 export {
-  GetTransactionReceiptError,
   DEFAULT_RECEIPT_LOG_SUMMARY_LIMIT,
+  GetTransactionReceiptError,
   MAX_RECEIPT_LOG_SUMMARY_LIMIT,
   getTransactionReceipt,
   type GetTransactionReceiptInput,
@@ -41,3 +71,31 @@ export {
   type TransactionClient,
   type TransactionResult,
 } from './get-transaction.js';
+export {
+  ReadContractError,
+  readContract,
+  type ReadContractClient,
+  type ReadContractInput,
+  type ReadContractRequest,
+  type ReadContractResult,
+} from './read-contract.js';
+export {
+  createGetBlockTool,
+  createGetChainInfoTool,
+  createGetContractCodeTool,
+  createGetLogsTool,
+  createGetNativeBalanceTool,
+  createGetTransactionReceiptTool,
+  createGetTransactionTool,
+  createReadContractTool,
+  createSepoliaTools,
+  getBlockToolSchema,
+  getChainInfoToolSchema,
+  getContractCodeToolSchema,
+  getLogsToolSchema,
+  getNativeBalanceToolSchema,
+  getTransactionReceiptToolSchema,
+  getTransactionToolSchema,
+  readContractToolSchema,
+  type SepoliaToolsClient,
+} from './langchain-tools.js';

@@ -3,7 +3,7 @@ import { fakeModel, type FakeBuiltModel } from '@langchain/core/testing';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createSepoliaTools, type SepoliaToolsClient } from '../tools/index.js';
-import { SEPOLIA_AGENT_SYSTEM_PROMPT } from './system-prompt.js';
+import { createSepoliaAgentSystemPrompt, SEPOLIA_AGENT_SYSTEM_PROMPT } from './system-prompt.js';
 
 const address = '0x52908400098527886E0F7030069857D2E4169EE7';
 const transactionHash = '0x' + 'a'.repeat(64);
@@ -54,6 +54,21 @@ describe('SEPOLIA_AGENT_SYSTEM_PROMPT', () => {
     expect(SEPOLIA_AGENT_SYSTEM_PROMPT).toContain('One ETH equals 10^18 wei');
     expect(SEPOLIA_AGENT_SYSTEM_PROMPT).toContain('wei per gas');
     expect(SEPOLIA_AGENT_SYSTEM_PROMPT).toContain('Never round');
+    expect(SEPOLIA_AGENT_SYSTEM_PROMPT).toContain(
+      'This restriction applies only to blockchain timestamps',
+    );
+  });
+
+  it('добавляет текущую дату, день недели и часовой пояс', () => {
+    const prompt = createSepoliaAgentSystemPrompt(
+      new Date('2026-10-18T12:34:56.000Z'),
+      'Europe/Amsterdam',
+    );
+
+    expect(prompt).toContain('2026-10-18 14:34:56 (Sunday)');
+    expect(prompt).toContain('Host time zone: Europe/Amsterdam');
+    expect(prompt).toContain('Current UTC instant: 2026-10-18T12:34:56.000Z');
+    expect(prompt).toContain('without calling a blockchain tool');
   });
 });
 

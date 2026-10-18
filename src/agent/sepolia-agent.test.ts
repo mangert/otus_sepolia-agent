@@ -7,11 +7,13 @@ import type { SepoliaToolsClient } from '../tools/index.js';
 import {
   DEFAULT_AGENT_MAX_ITERATIONS,
   SepoliaAgentExecutionError,
+  createSepoliaChatModel,
   createSepoliaAgent,
 } from './sepolia-agent.js';
 
 const lowercaseAddress = '0x52908400098527886e0f7030069857d2e4169ee7';
 const checksummedAddress = '0x52908400098527886E0F7030069857D2E4169EE7';
+const usdcContractAddress = '0x94a9D9AC8a22534E3FaCa9F4e7F2E2cf85d5E4C8';
 const balanceWei = 1_000_000_000_000_000_000n;
 const llmConfig: AppConfig['llm'] = {
   provider: 'opencode-llm-proxy',
@@ -60,6 +62,115 @@ const createMockClient = () => {
 };
 
 describe('Sepolia agent loop', () => {
+  it('читает очевидный нативный баланс без обращения к LLM', async () => {
+    const mocks = createMockClient();
+    const model = fakeModel();
+    const agent = createSepoliaAgent({ llm: llmConfig, client: mocks.client, model });
+
+    const result = await agent.invoke(`Проверь баланс кошелька ${checksummedAddress}`);
+
+    expect(result.answer).toBe(
+      `Баланс адреса ${checksummedAddress} в Sepolia: 1 ETH (1000000000000000000 wei). Данные получены на блоке 100.`,
+    );
+    expect(result.intermediateSteps).toEqual([
+      expect.objectContaining({
+        toolName: 'get_native_balance',
+        input: { address: checksummedAddress },
+        status: 'success',
+      }),
+    ]);
+    expect(model.callCount).toBe(0);
+    expect(mocks.getBalance).toHaveBeenCalledWith({
+      address: checksummedAddress,
+      blockNumber: 100n,
+    });
+  });
+
+  it('не подменяет баланс токена нативным ETH-балансом', async () => {
+    const mocks = createMockClient();
+    const model = fakeModel();
+    const agent = createSepoliaAgent({ llm: llmConfig, client: mocks.client, model });
+
+    const result = await agent.invoke(
+      `Спасибо! А какой баланс USDС на адресе ${checksummedAddress}?`,
+    );
+
+    expect(result.answer).toContain('адрес контракта ERC-20 токена в сети Sepolia');
+    expect(result.answer).toContain('balanceOf(address)');
+    expect(result.answer).toContain('уже встроен');
+    expect(result.answer).not.toContain('ETH (');
+    expect(result.intermediateSteps).toEqual([]);
+    expect(model.callCount).toBe(0);
+    expect(mocks.getBalance).not.toHaveBeenCalled();
+  });
+
+  it('читает ERC-20 баланс по контракту и кошельку из истории', async () => {
+    const mocks = createMockClient();
+    mocks.readContract.mockImplementation(async ({ functionName }) => {
+      if (functionName === 'balanceOf') return 12_345_678n;
+      if (functionName === 'decimals') return 6;
+      return 'USDC';
+    });
+    const model = fakeModel();
+    const agent = createSepoliaAgent({ llm: llmConfig, client: mocks.client, model });
+
+    const result = await agent.invoke(
+      `Так, а какой баланс токена USDС с адресом контракта ${usdcContractAddress} на том же кошельке?`,
+      {
+        history: [
+          {
+            role: 'user',
+            content: `Какой нативный баланс на адресе ${checksummedAddress}?`,
+          },
+          {
+            role: 'assistant',
+            content: `Баланс адреса ${checksummedAddress}: 1 ETH.`,
+          },
+        ],
+      },
+    );
+
+    expect(result.answer).toContain(`Баланс адреса ${checksummedAddress}: 12.345678 USDC`);
+    expect(result.answer).toContain(`Контракт токена: ${usdcContractAddress}`);
+    expect(result.answer).toContain('12345678 минимальных единиц');
+    expect(result.intermediateSteps).toEqual([
+      expect.objectContaining({
+        toolName: 'get_erc20_balance',
+        input: {
+          tokenAddress: usdcContractAddress,
+          ownerAddress: checksummedAddress,
+        },
+        status: 'success',
+      }),
+    ]);
+    expect(model.callCount).toBe(0);
+    expect(mocks.getBalance).not.toHaveBeenCalled();
+    expect(mocks.readContract).toHaveBeenCalledTimes(3);
+  });
+
+  it('исправляет лишние символы вокруг адреса в tool call', async () => {
+    const mocks = createMockClient();
+    const model = fakeModel()
+      .respondWithTools([
+        {
+          name: 'get_native_balance',
+          args: { address: `\\)\n${lowercaseAddress}` },
+          id: 'repaired-balance-call',
+        },
+      ])
+      .respond(new AIMessage('The balance is 1 Sepolia ETH at block 100.'));
+    const agent = createSepoliaAgent({ llm: llmConfig, client: mocks.client, model });
+
+    const result = await agent.invoke('Read the requested wallet funds.');
+
+    expect(result.answer).toContain('1 Sepolia ETH');
+    expect(mocks.getBalance).toHaveBeenCalledWith({
+      address: checksummedAddress,
+      blockNumber: 100n,
+    });
+    expect(model.callCount).toBe(2);
+  });
+
   it('выполняет один тул и возвращает финальный ответ с промежуточным результатом', async () => {
     const mocks = createMockClient();
     const model = fakeModel()
@@ -96,7 +207,7 @@ describe('Sepolia agent loop', () => {
     expect(model.callCount).toBe(2);
     expect(agent.maxIterations).toBe(DEFAULT_AGENT_MAX_ITERATIONS);
     expect(agent.recursionLimit).toBe(17);
-    expect(agent.toolNames).toHaveLength(8);
+    expect(agent.toolNames).toHaveLength(9);
   });
 
   it('выполняет несколько тулов в последовательных ReAct-итерациях', async () => {
@@ -151,6 +262,21 @@ describe('Sepolia agent loop', () => {
     expect(mocks.getChainId).not.toHaveBeenCalled();
     expect(mocks.getBlockNumber).not.toHaveBeenCalled();
     expect(mocks.getBalance).not.toHaveBeenCalled();
+  });
+
+  it('удаляет просочившееся рассуждение Qwen из финального ответа', async () => {
+    const mocks = createMockClient();
+    const model = fakeModel().respond(
+      new AIMessage('Internal reasoning that must stay hidden.\n</think>\nКраткий ответ.'),
+    );
+    const agent = createSepoliaAgent({ llm: llmConfig, client: mocks.client, model });
+
+    await expect(agent.invoke('Представься кратко.')).resolves.toEqual({
+      answer: 'Краткий ответ.',
+      intermediateSteps: [],
+    });
+    expect(model.calls[0]?.messages[0]?.text).toContain('## Runtime date context');
+    expect(model.calls[0]?.messages[0]?.text).toContain('Current host-local date and time:');
   });
 
   it('передаёт RPC-ошибку модели и помечает промежуточный шаг как error', async () => {
@@ -224,5 +350,31 @@ describe('Sepolia agent loop', () => {
     expect(agent.recursionLimit).toBe(3);
     expect(mocks.getBlockNumber).toHaveBeenCalledOnce();
     expect(model.callCount).toBe(2);
+  });
+});
+
+describe('Sepolia chat model', () => {
+  it('отключает серверную проверку tool calls Groq для локального восстановления', () => {
+    const model = createSepoliaChatModel(
+      {
+        ...llmConfig,
+        provider: 'groq',
+        baseUrl: 'https://api.groq.com/openai/v1',
+        apiKey: 'test-key',
+      },
+      { disableToolValidation: true },
+    );
+
+    expect(model.modelKwargs).toMatchObject({
+      disable_tool_validation: true,
+      reasoning_format: 'hidden',
+      reasoning_effort: 'none',
+    });
+  });
+
+  it('не добавляет Groq reasoning-параметры локальному прокси', () => {
+    const model = createSepoliaChatModel(llmConfig);
+
+    expect(model.modelKwargs).toEqual({});
   });
 });

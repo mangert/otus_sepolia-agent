@@ -10,9 +10,11 @@ import {
   SepoliaAgentOutputError,
   createSepoliaAgent,
   type SepoliaAgent,
+  type SepoliaConversationMessage,
 } from './agent/index.js';
 import { createSepoliaClient } from './blockchain/index.js';
 import { ConfigurationError, loadConfig } from './config/index.js';
+import { configureOutboundProxy } from './network/index.js';
 
 export const CLI_EXIT_SUCCESS = 0;
 export const CLI_EXIT_FAILURE = 1;
@@ -22,6 +24,7 @@ const CLI_PROMPT = 'sepolia> ';
 const CLI_INTRO = 'Sepolia read-only agent. Type /exit to quit.';
 const CLI_GOODBYE = 'Goodbye.';
 const MAX_CLI_ERROR_CHARACTERS = 1_000;
+const MAX_CLI_HISTORY_MESSAGES = 12;
 const EXIT_COMMANDS = new Set(['/exit', 'exit', 'quit']);
 const CLI_USAGE = `Usage:
   npm run dev -- "<question>"       Run one request
@@ -55,6 +58,7 @@ export class CliUsageError extends Error {
 /** Создаёт агента из файловой конфигурации и переменных окружения. */
 const createConfiguredAgent = (): SepoliaAgent => {
   const config = loadConfig();
+  configureOutboundProxy(config.network);
   const client = createSepoliaClient(config.blockchain);
 
   return createSepoliaAgent({
@@ -174,11 +178,19 @@ const executeQuery = async (
   query: string,
   output: NodeJS.WritableStream,
   errorOutput: NodeJS.WritableStream,
+  history: SepoliaConversationMessage[],
   signal?: AbortSignal,
 ): Promise<QueryOutcome> => {
   try {
-    const result = await agent.invoke(query, signal === undefined ? {} : { signal });
+    const result = await agent.invoke(query, {
+      ...(signal === undefined ? {} : { signal }),
+      ...(history.length === 0 ? {} : { history: [...history] }),
+    });
     output.write(result.answer + '\n');
+    history.push({ role: 'user', content: query }, { role: 'assistant', content: result.answer });
+    if (history.length > MAX_CLI_HISTORY_MESSAGES) {
+      history.splice(0, history.length - MAX_CLI_HISTORY_MESSAGES);
+    }
     return 'success';
   } catch (error: unknown) {
     if (isAbortError(error) || signal?.aborted === true) {
@@ -198,6 +210,7 @@ const runInteractiveMode = async (
   errorOutput: NodeJS.WritableStream,
   signal?: AbortSignal,
 ): Promise<number> => {
+  const history: SepoliaConversationMessage[] = [];
   const terminal = isTerminalStream(input) && isTerminalStream(output);
   const readline = createInterface({
     input,
@@ -222,7 +235,7 @@ const runInteractiveMode = async (
       }
 
       if (query.length > 0) {
-        await executeQuery(agent, query, output, errorOutput, signal);
+        await executeQuery(agent, query, output, errorOutput, history, signal);
       }
 
       if (signal?.aborted === true) {
@@ -272,7 +285,7 @@ export const runCli = async (options: RunCliOptions = {}): Promise<number> => {
   }
 
   if (mode.kind === 'single') {
-    const outcome = await executeQuery(agent, mode.query, output, errorOutput, options.signal);
+    const outcome = await executeQuery(agent, mode.query, output, errorOutput, [], options.signal);
     return outcome === 'failure' ? CLI_EXIT_FAILURE : CLI_EXIT_SUCCESS;
   }
 

@@ -17,6 +17,7 @@ import {
   MAX_TOPIC_OR_VALUES,
   type LogsClient,
 } from './get-logs.js';
+import { getErc20Balance, type Erc20BalanceClient } from './get-erc20-balance.js';
 import { getNativeBalance, type NativeBalanceClient } from './get-native-balance.js';
 import {
   getTransactionReceipt,
@@ -29,7 +30,7 @@ import { readContract, type ReadContractClient } from './read-contract.js';
 const ethereumAddressInputSchema = z
   .string()
   .regex(/^0x[0-9a-fA-F]{40}$/)
-  .describe('A 20-byte Ethereum address with a 0x prefix.');
+  .describe('Exact 0x-prefixed 20-byte address; copy only the address, with no extra characters.');
 const ethereumHashInputSchema = z
   .string()
   .regex(/^0x[0-9a-fA-F]{64}$/)
@@ -58,6 +59,16 @@ export const getChainInfoToolSchema = z.strictObject({});
 
 export const getNativeBalanceToolSchema = z.strictObject({
   address: ethereumAddressInputSchema,
+  blockNumber: blockNumberInputSchema.optional(),
+});
+
+export const getErc20BalanceToolSchema = z.strictObject({
+  tokenAddress: ethereumAddressInputSchema.describe(
+    'Exact Sepolia ERC-20 contract address; do not use the holder address here.',
+  ),
+  ownerAddress: ethereumAddressInputSchema.describe(
+    'Exact wallet or account address whose token balance should be read.',
+  ),
   blockNumber: blockNumberInputSchema.optional(),
 });
 
@@ -115,6 +126,7 @@ export interface SepoliaToolsClient
     ChainInfoClient,
     ContractCodeClient,
     LogsClient,
+    Erc20BalanceClient,
     NativeBalanceClient,
     ReadContractClient,
     TransactionClient,
@@ -124,8 +136,7 @@ export interface SepoliaToolsClient
 export const createGetChainInfoTool = (client: ChainInfoClient) =>
   new DynamicStructuredTool({
     name: 'get_chain_info',
-    description:
-      'Verify the RPC network and return the Sepolia chain ID, latest block number, and read-only connection status.',
+    description: 'Return Sepolia chain ID, latest block, and connection status.',
     schema: getChainInfoToolSchema,
     metadata: readOnlyToolMetadata,
     func: async () => getChainInfo(client),
@@ -135,8 +146,7 @@ export const createGetChainInfoTool = (client: ChainInfoClient) =>
 export const createGetNativeBalanceTool = (client: NativeBalanceClient) =>
   new DynamicStructuredTool({
     name: 'get_native_balance',
-    description:
-      'Read the native Sepolia ETH balance of an address at an optional block. Returns both wei and ETH with the observed block number.',
+    description: 'Read native Sepolia ETH balance in wei and ETH at an optional block.',
     schema: getNativeBalanceToolSchema,
     metadata: readOnlyToolMetadata,
     func: async ({ address, blockNumber }) =>
@@ -146,12 +156,27 @@ export const createGetNativeBalanceTool = (client: NativeBalanceClient) =>
       }),
   });
 
+/** Создаёт LangChain-тул чтения стандартного ERC-20 баланса. */
+export const createGetErc20BalanceTool = (client: Erc20BalanceClient) =>
+  new DynamicStructuredTool({
+    name: 'get_erc20_balance',
+    description:
+      'Read an ERC-20 token balance on Sepolia using a token contract address and a holder address. The standard balanceOf, decimals, and symbol ABI is built in.',
+    schema: getErc20BalanceToolSchema,
+    metadata: readOnlyToolMetadata,
+    func: async ({ tokenAddress, ownerAddress, blockNumber }) =>
+      getErc20Balance(client, {
+        tokenAddress,
+        ownerAddress,
+        ...(blockNumber === undefined ? {} : { blockNumber }),
+      }),
+  });
+
 /** Создаёт LangChain-тул чтения блока. */
 export const createGetBlockTool = (client: BlockClient) =>
   new DynamicStructuredTool({
     name: 'get_block',
-    description:
-      'Read a Sepolia block by number, hash, or latest and return a bounded summary with transaction hashes.',
+    description: 'Read a Sepolia block by number, hash, or latest.',
     schema: getBlockToolSchema,
     metadata: readOnlyToolMetadata,
     func: async ({ identifier, maxTransactionHashes }) =>
@@ -166,8 +191,7 @@ export const createGetBlockTool = (client: BlockClient) =>
 export const createGetTransactionTool = (client: TransactionClient) =>
   new DynamicStructuredTool({
     name: 'get_transaction',
-    description:
-      'Read a Sepolia transaction by hash and return confirmation status, participants, value, gas fields, and input data.',
+    description: 'Read a Sepolia transaction by hash.',
     schema: getTransactionToolSchema,
     metadata: readOnlyToolMetadata,
     func: async ({ hash }) => getTransaction(client, { hash }),
@@ -177,8 +201,7 @@ export const createGetTransactionTool = (client: TransactionClient) =>
 export const createGetTransactionReceiptTool = (client: TransactionReceiptClient) =>
   new DynamicStructuredTool({
     name: 'get_transaction_receipt',
-    description:
-      'Read a Sepolia transaction receipt with execution status, gas usage, created contract address, and bounded log summaries.',
+    description: 'Read a Sepolia transaction receipt and execution status.',
     schema: getTransactionReceiptToolSchema,
     metadata: readOnlyToolMetadata,
     func: async ({ hash, maxLogSummaries }) =>
@@ -193,8 +216,7 @@ export const createGetTransactionReceiptTool = (client: TransactionReceiptClient
 export const createGetContractCodeTool = (client: ContractCodeClient) =>
   new DynamicStructuredTool({
     name: 'get_contract_code',
-    description:
-      'Check whether a Sepolia address has contract bytecode at an optional block and return a bounded bytecode preview and hash.',
+    description: 'Read contract bytecode at an optional Sepolia block.',
     schema: getContractCodeToolSchema,
     metadata: readOnlyToolMetadata,
     func: async ({ address, blockNumber, maxPreviewBytes }) =>
@@ -212,8 +234,7 @@ export const createGetContractCodeTool = (client: ContractCodeClient) =>
 export const createGetLogsTool = (client: LogsClient) =>
   new DynamicStructuredTool({
     name: 'get_logs',
-    description:
-      'Read Sepolia contract logs for an explicit inclusive block range and optional topic filters. Range and output sizes are bounded.',
+    description: 'Read bounded Sepolia logs for an explicit block range and optional topics.',
     schema: getLogsToolSchema,
     metadata: readOnlyToolMetadata,
     func: async ({
@@ -246,7 +267,7 @@ export const createReadContractTool = (client: ReadContractClient) =>
   new DynamicStructuredTool({
     name: 'read_contract',
     description:
-      'Call one view or pure function on a Sepolia contract. Requires the ABI and canonical full signature; payable and nonpayable functions are rejected.',
+      'Call one view or pure Sepolia contract function using its ABI and full signature.',
     schema: readContractToolSchema,
     metadata: readOnlyToolMetadata,
     func: async ({ address, abi, functionSignature, args, blockNumber }) =>
@@ -264,6 +285,7 @@ export const createSepoliaTools = (client: SepoliaToolsClient) =>
   [
     createGetChainInfoTool(client),
     createGetNativeBalanceTool(client),
+    createGetErc20BalanceTool(client),
     createGetBlockTool(client),
     createGetTransactionTool(client),
     createGetTransactionReceiptTool(client),

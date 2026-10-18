@@ -34,10 +34,14 @@ describe('loadConfig', () => {
   it('загружает корректную конфигурацию со значениями по умолчанию', () => {
     const config = loadConfig({
       cwd: process.cwd(),
-      env: { SEPOLIA_RPC_URL: 'https://sepolia-rpc.example' },
+      env: {
+        SEPOLIA_RPC_URL: 'https://sepolia-rpc.example',
+        GROQ_API_KEY: ' test-groq-key ',
+      },
     });
 
     expect(config).toEqual({
+      network: {},
       blockchain: {
         network: 'sepolia',
         chainId: 11_155_111,
@@ -50,22 +54,34 @@ describe('loadConfig', () => {
         },
       },
       llm: {
-        provider: 'opencode-llm-proxy',
+        provider: 'groq',
         protocol: 'openai-compatible',
-        baseUrl: 'http://127.0.0.1:4010/v1',
-        model: 'opencode/nemotron-3-ultra-free',
+        baseUrl: 'https://api.groq.com/openai/v1',
+        model: 'qwen/qwen3.8-27b',
         timeoutMs: 60_000,
         maxRetries: 2,
+        apiKey: 'test-groq-key',
       },
     });
   });
 
   it('применяет числовые настройки и bearer token из окружения', () => {
+    const path = createLlmConfig({
+      provider: 'opencode-llm-proxy',
+      protocol: 'openai-compatible',
+      baseUrl: 'http://127.0.0.1:4010/v1',
+      model: 'opencode/test-model',
+      timeoutMs: 60_000,
+      maxRetries: 2,
+    });
     const config = loadConfig({
-      cwd: process.cwd(),
       env: {
         SEPOLIA_RPC_URL: 'http://127.0.0.1:8545',
+        LLM_CONFIG_PATH: path,
         OPENCODE_LLM_PROXY_TOKEN: ' local-token ',
+        HTTP_PROXY: 'http://127.0.0.1:10808',
+        HTTPS_PROXY: 'http://127.0.0.1:10808',
+        NO_PROXY: ' localhost,127.0.0.1 ',
         RPC_TIMEOUT_MS: '25000',
         RPC_MAX_RETRIES: '4',
         RPC_MAX_LOG_BLOCK_RANGE: '5000',
@@ -83,6 +99,36 @@ describe('loadConfig', () => {
       },
     });
     expect(config.llm.apiKey).toBe('local-token');
+    expect(config.network).toEqual({
+      httpProxyUrl: 'http://127.0.0.1:10808',
+      httpsProxyUrl: 'http://127.0.0.1:10808',
+      noProxy: 'localhost,127.0.0.1',
+    });
+  });
+
+  it.each(['not-a-url', 'socks5://127.0.0.1:10808'])(
+    'отклоняет некорректный HTTP_PROXY: %s',
+    (proxyUrl) => {
+      expect(() =>
+        loadConfig({
+          cwd: process.cwd(),
+          env: {
+            SEPOLIA_RPC_URL: 'https://sepolia-rpc.example',
+            GROQ_API_KEY: 'test-groq-key',
+            HTTP_PROXY: proxyUrl,
+          },
+        }),
+      ).toThrow(/HTTP_PROXY/);
+    },
+  );
+
+  it('отклоняет Groq-конфигурацию без GROQ_API_KEY', () => {
+    expect(() =>
+      loadConfig({
+        cwd: process.cwd(),
+        env: { SEPOLIA_RPC_URL: 'https://sepolia-rpc.example' },
+      }),
+    ).toThrow(/GROQ_API_KEY/);
   });
 
   it('отклоняет отсутствующий SEPOLIA_RPC_URL', () => {

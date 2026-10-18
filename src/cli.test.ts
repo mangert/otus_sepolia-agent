@@ -155,7 +155,12 @@ describe('CLI execution', () => {
 
     expect(exitCode).toBe(CLI_EXIT_SUCCESS);
     expect(mocks.invoke).toHaveBeenNthCalledWith(1, 'First request', {});
-    expect(mocks.invoke).toHaveBeenNthCalledWith(2, 'Second request', {});
+    expect(mocks.invoke).toHaveBeenNthCalledWith(2, 'Second request', {
+      history: [
+        { role: 'user', content: 'First request' },
+        { role: 'assistant', content: 'Mock Sepolia answer.' },
+      ],
+    });
     expect(mocks.invoke).toHaveBeenCalledTimes(2);
     expect(output.read()).toBe(
       'Sepolia read-only agent. Type /exit to quit.\n' +

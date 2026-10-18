@@ -47,6 +47,13 @@ export {
   type TopicFilter,
 } from './get-logs.js';
 export {
+  GetErc20BalanceError,
+  getErc20Balance,
+  type Erc20BalanceClient,
+  type Erc20BalanceInput,
+  type Erc20BalanceResult,
+} from './get-erc20-balance.js';
+export {
   GetNativeBalanceError,
   getNativeBalance,
   type NativeBalanceClient,
@@ -83,6 +90,7 @@ export {
   createGetBlockTool,
   createGetChainInfoTool,
   createGetContractCodeTool,
+  createGetErc20BalanceTool,
   createGetLogsTool,
   createGetNativeBalanceTool,
   createGetTransactionReceiptTool,
@@ -92,6 +100,7 @@ export {
   getBlockToolSchema,
   getChainInfoToolSchema,
   getContractCodeToolSchema,
+  getErc20BalanceToolSchema,
   getLogsToolSchema,
   getNativeBalanceToolSchema,
   getTransactionReceiptToolSchema,

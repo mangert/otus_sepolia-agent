@@ -4,6 +4,7 @@ import {
   createGetBlockTool,
   createGetChainInfoTool,
   createGetContractCodeTool,
+  createGetErc20BalanceTool,
   createGetLogsTool,
   createGetNativeBalanceTool,
   createGetTransactionReceiptTool,
@@ -13,6 +14,7 @@ import {
   getBlockToolSchema,
   getChainInfoToolSchema,
   getContractCodeToolSchema,
+  getErc20BalanceToolSchema,
   getLogsToolSchema,
   getNativeBalanceToolSchema,
   getTransactionReceiptToolSchema,
@@ -141,6 +143,16 @@ describe('LangChain tool schemas', () => {
       invalid: { address: '0x1234' },
     },
     {
+      name: 'get_erc20_balance',
+      schema: getErc20BalanceToolSchema,
+      valid: {
+        tokenAddress: lowercaseAddress,
+        ownerAddress: recipientAddress,
+        blockNumber: '42',
+      },
+      invalid: { tokenAddress: lowercaseAddress, ownerAddress: '0x1234' },
+    },
+    {
       name: 'get_block',
       schema: getBlockToolSchema,
       valid: { identifier: 'latest', maxTransactionHashes: 0 },
@@ -219,6 +231,7 @@ describe('LangChain tool registry', () => {
     expect(tools.map(({ name }) => name)).toEqual([
       'get_chain_info',
       'get_native_balance',
+      'get_erc20_balance',
       'get_block',
       'get_transaction',
       'get_transaction_receipt',
@@ -261,6 +274,33 @@ describe('LangChain tool input conversion and service calls', () => {
       blockNumber: 42n,
     });
     expect(getBlockNumber).not.toHaveBeenCalled();
+  });
+
+  it('get_erc20_balance различает контракт токена и владельца', async () => {
+    const { client, readContractRpc, getBlockNumber } = createMockClient();
+    readContractRpc.mockImplementation(async ({ functionName }) => {
+      if (functionName === 'balanceOf') return 12_345_678n;
+      if (functionName === 'decimals') return 6;
+      return 'USDC';
+    });
+
+    await expect(
+      createGetErc20BalanceTool(client).invoke({
+        tokenAddress: lowercaseAddress,
+        ownerAddress: recipientAddress,
+        blockNumber: '42',
+      }),
+    ).resolves.toMatchObject({
+      tokenAddress: checksummedAddress,
+      ownerAddress: recipientAddress,
+      blockNumber: '42',
+      balanceRaw: '12345678',
+      balanceFormatted: '12.345678',
+      decimals: 6,
+      symbol: 'USDC',
+    });
+    expect(getBlockNumber).not.toHaveBeenCalled();
+    expect(readContractRpc).toHaveBeenCalledTimes(3);
   });
 
   it('get_block передаёт преобразованный номер и лимит результата', async () => {
@@ -423,6 +463,23 @@ describe('LangChain tool error handling', () => {
           cause,
           operation: createGetNativeBalanceTool(mocks.client).invoke({
             address: lowercaseAddress,
+            blockNumber: 42,
+          }),
+        };
+      },
+    },
+    {
+      name: 'get_erc20_balance',
+      errorName: 'GetErc20BalanceError',
+      run: () => {
+        const mocks = createMockClient();
+        const cause = new Error('token balance unavailable');
+        mocks.readContractRpc.mockRejectedValue(cause);
+        return {
+          cause,
+          operation: createGetErc20BalanceTool(mocks.client).invoke({
+            tokenAddress: lowercaseAddress,
+            ownerAddress: recipientAddress,
             blockNumber: 42,
           }),
         };

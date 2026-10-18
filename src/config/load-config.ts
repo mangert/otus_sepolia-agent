@@ -15,6 +15,11 @@ export interface LoadConfigOptions {
 }
 
 export interface AppConfig {
+  network: {
+    httpProxyUrl?: string;
+    httpsProxyUrl?: string;
+    noProxy?: string;
+  };
   blockchain: {
     network: 'sepolia';
     chainId: typeof SEPOLIA_CHAIN_ID;
@@ -92,6 +97,22 @@ const loadLlmFileConfig = (path: string): LlmFileConfig => {
   }
 };
 
+/** Выбирает и проверяет API-ключ для настроенного LLM-провайдера. */
+const resolveLlmApiKey = (
+  config: LlmFileConfig,
+  environment: ReturnType<typeof parseEnvironment>,
+): string | undefined => {
+  if (config.provider === 'groq') {
+    if (environment.GROQ_API_KEY === undefined) {
+      throw new ConfigurationError('GROQ_API_KEY is required when the LLM provider is groq.');
+    }
+
+    return environment.GROQ_API_KEY;
+  }
+
+  return environment.OPENCODE_LLM_PROXY_TOKEN;
+};
+
 /** Загружает и объединяет конфигурацию приложения. */
 export const loadConfig = (options: LoadConfigOptions = {}): AppConfig => {
   const cwd = options.cwd ?? process.cwd();
@@ -106,8 +127,14 @@ export const loadConfig = (options: LoadConfigOptions = {}): AppConfig => {
     ? configuredLlmPath
     : resolve(cwd, configuredLlmPath);
   const llmFileConfig = loadLlmFileConfig(llmPath);
+  const llmApiKey = resolveLlmApiKey(llmFileConfig, environment);
 
   return {
+    network: {
+      ...(environment.HTTP_PROXY === undefined ? {} : { httpProxyUrl: environment.HTTP_PROXY }),
+      ...(environment.HTTPS_PROXY === undefined ? {} : { httpsProxyUrl: environment.HTTPS_PROXY }),
+      ...(environment.NO_PROXY === undefined ? {} : { noProxy: environment.NO_PROXY }),
+    },
     blockchain: {
       network: 'sepolia',
       chainId: SEPOLIA_CHAIN_ID,
@@ -121,9 +148,7 @@ export const loadConfig = (options: LoadConfigOptions = {}): AppConfig => {
     },
     llm: {
       ...llmFileConfig,
-      ...(environment.OPENCODE_LLM_PROXY_TOKEN === undefined
-        ? {}
-        : { apiKey: environment.OPENCODE_LLM_PROXY_TOKEN }),
+      ...(llmApiKey === undefined ? {} : { apiKey: llmApiKey }),
     },
   };
 };

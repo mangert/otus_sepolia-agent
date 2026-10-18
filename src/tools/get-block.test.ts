@@ -34,6 +34,7 @@ describe('getBlock', () => {
       hash: blockHash,
       parentHash,
       timestamp: '1700000000',
+      timestampIso: '2023-11-14T22:13:20.000Z',
       miner: checksummedMiner,
       gasLimit: '30000000',
       gasUsed: '21000',

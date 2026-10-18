@@ -1,9 +1,15 @@
 import { config as loadDotEnv } from 'dotenv';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createSepoliaClient, type SepoliaClient } from '../../src/blockchain/index.js';
 import { loadConfig } from '../../src/config/index.js';
-import { getChainInfo, getNativeBalance, readContract } from '../../src/tools/index.js';
+import { configureOutboundProxy } from '../../src/network/index.js';
+import {
+  getChainInfo,
+  getErc20Balance,
+  getNativeBalance,
+  readContract,
+} from '../../src/tools/index.js';
 
 const SEPOLIA_CHAIN_ID = 11_155_111;
 const SEPOLIA_WETH9_ADDRESS = '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14';
@@ -24,9 +30,16 @@ const hasSepoliaRpc =
 
 describe.skipIf(!hasSepoliaRpc)('Sepolia live integration', () => {
   let client: SepoliaClient;
+  let restoreProxy: (() => void) | undefined;
 
   beforeAll(() => {
-    client = createSepoliaClient(loadConfig().blockchain);
+    const config = loadConfig();
+    restoreProxy = configureOutboundProxy(config.network);
+    client = createSepoliaClient(config.blockchain);
+  });
+
+  afterAll(() => {
+    restoreProxy?.();
   });
 
   it('подключается именно к Sepolia и возвращает актуальный блок', async () => {
@@ -53,6 +66,21 @@ describe.skipIf(!hasSepoliaRpc)('Sepolia live integration', () => {
     expect(BigInt(result.blockNumber)).toBeGreaterThan(0n);
     expect(BigInt(result.balanceWei)).toBeGreaterThanOrEqual(0n);
     expect(result.balanceEth).toMatch(/^\d+(?:\.\d+)?$/u);
+  });
+
+  it('читает стандартный ERC-20 баланс и метаданные WETH9', async () => {
+    const result = await getErc20Balance(client, {
+      tokenAddress: SEPOLIA_WETH9_ADDRESS,
+      ownerAddress: SEPOLIA_WETH9_ADDRESS,
+    });
+
+    expect(result.tokenAddress).toBe(SEPOLIA_WETH9_ADDRESS);
+    expect(result.ownerAddress).toBe(SEPOLIA_WETH9_ADDRESS);
+    expect(BigInt(result.blockNumber)).toBeGreaterThan(0n);
+    expect(BigInt(result.balanceRaw)).toBeGreaterThanOrEqual(0n);
+    expect(result.decimals).toBe(18);
+    expect(result.symbol).toBe('WETH');
+    expect(result.balanceFormatted).toMatch(/^\d+(?:\.\d+)?$/u);
   });
 
   it('вызывает простую view-функцию WETH9', async () => {

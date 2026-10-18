@@ -58,6 +58,7 @@ export interface BlockResult {
   hash: Hash;
   parentHash: Hash;
   timestamp: string;
+  timestampIso: string | null;
   miner: Address;
   gasLimit: string;
   gasUsed: string;
@@ -66,6 +67,17 @@ export interface BlockResult {
   transactionHashes: Hash[];
   transactionsTruncated: boolean;
 }
+
+/** Преобразует Unix timestamp в ISO без потери исходного целого значения. */
+const formatTimestampIso = (timestamp: bigint): string | null => {
+  const milliseconds = timestamp * 1_000n;
+
+  if (milliseconds > 8_640_000_000_000_000n) {
+    return null;
+  }
+
+  return new Date(Number(milliseconds)).toISOString();
+};
 
 export class GetBlockError extends Error {
   constructor(message: string, options?: ErrorOptions) {
@@ -116,6 +128,7 @@ export const getBlock = async (
     hash: block.hash,
     parentHash: block.parentHash,
     timestamp: block.timestamp.toString(10),
+    timestampIso: formatTimestampIso(block.timestamp),
     miner: block.miner,
     gasLimit: block.gasLimit.toString(10),
     gasUsed: block.gasUsed.toString(10),

@@ -14,6 +14,7 @@
     "test:watch": "vitest --config vitest.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:integration:llm": "vitest run --config vitest.llm-integration.config.ts",
+    "report:evidence": "tsx scripts/capture-llm-evidence.ts",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm test"
   },
   "repository": {

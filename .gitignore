@@ -8,6 +8,7 @@ dist/
 # Test artifacts
 coverage/
 .tmp-*
+data.tmp
 
 # Local environment files
 .env
